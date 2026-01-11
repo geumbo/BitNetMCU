@@ -58,6 +58,8 @@ class BitQuant:
             self.bpw = 2
         elif self.QuantType in ['Ternary']:
             self.bpw = 1.6
+        elif self.QuantType in ['BNRV']:
+            self.bpw = 2.0  # 2-bit encoding: 16 trits / 32 bits
         elif self.QuantType in ['4bit', '4bitsym', 'FP130' , 'NF4']:
             self.bpw = 4
         elif self.QuantType == '5bitsym':
@@ -142,13 +144,13 @@ class BitQuant:
            scale = 128.0 / self.s
         elif self.QuantType == 'NF4':
             scale = 1.0 / self.s
-        elif self.QuantType == 'Ternary': # 1.58bits
+        elif self.QuantType in ['Ternary', 'BNRV']: # 1.58bits
             # scale = 1.0 / self.s
             scale = 1.0 / w.abs().mean().clamp_(min=1e-5)
         else:
             scale = (2.0**(self.bpw-1)) / self.s
 
-        if self.QuantType == 'Ternary': # 1.58bits
+        if self.QuantType in ['Ternary', 'BNRV']: # 1.58bits
             u = (w * scale ).round().clamp_(-1, 1)
         elif self.QuantType == 'Binary': # 1 bit
             e = w.mean()

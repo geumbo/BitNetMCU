@@ -22,6 +22,7 @@ batchtest/
 # python cache
 __pycache__/
 venv/
+uv.lock
 # ides
 .vscode/
 .idea/

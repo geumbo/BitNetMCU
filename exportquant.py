@@ -94,7 +94,8 @@ def export_to_hfile(quantized_model, filename, runname, modelname=''):
                 weights = np.array(layer_info['quantized_weights'])
                 quantization_type = layer_info['quantization_type']
 
-                if (bpw*incoming_weights%32) != 0:
+                # Skip boundary check for Ternary (10-trit) and BNRV (16-trit) - they handle alignment internally
+                if quantization_type not in ['Ternary', 'BNRV'] and (bpw*incoming_weights%32) != 0:
                     raise ValueError(f"Size mismatch: Incoming weights must be packed to 32bit boundary. Incoming weights: {incoming_weights} Bit per weight: {bpw} Total bits: {bpw*incoming_weights}")
 
                 print(f'Layer: {layer} Quantization type: <{quantization_type}>, Bits per weight: {bpw}, Num. incoming: {incoming_weights},  Num outgoing: {outgoing_weights}')
@@ -174,6 +175,55 @@ def export_to_hfile(quantized_model, filename, runname, modelname=''):
                     f.write('\n};\n\n')
 
                     print(f'Layer: {layer} Ternary: {n_inputs} inputs (padded), {outgoing_weights} outputs, {packed_weights.size} uint16 words')
+                    continue  # Skip standard 32-bit packing
+                elif quantization_type == 'BNRV':
+                    # BNRV: 16 trits packed into 32 bits using 2-bit encoding
+                    # Encoding: 00=0, 01=+1, 11=-1 (compatible with BNRV extension)
+                    n_outputs, n_inputs = weights.shape
+
+                    # Pad to multiple of 16 if needed (16 trits per 32-bit word)
+                    if n_inputs % 16 != 0:
+                        pad_size = 16 - (n_inputs % 16)
+                        print(f'WARNING: BNRV layer {layer} has {n_inputs} inputs, padding with {pad_size} zeros to align to 16')
+                        weights = np.pad(weights, ((0, 0), (0, pad_size)), mode='constant', constant_values=0)
+                        n_inputs = weights.shape[1]
+
+                    # Map {-1, 0, +1} to 2-bit encoding: 00=0, 01=+1, 11=-1
+                    encoded_weights = np.where(weights == 1, 0b01,
+                                      np.where(weights == -1, 0b11, 0b00)).astype(np.uint32)
+
+                    # Pack 16 trits into 32 bits per word (LSB first, matching BNRV bnsum instruction)
+                    packed_row_size = n_inputs // 16
+                    packed_weights = np.zeros((n_outputs, packed_row_size), dtype=np.uint32)
+
+                    for row in range(n_outputs):
+                        for word_idx in range(packed_row_size):
+                            start = word_idx * 16
+                            chunk = encoded_weights[row, start:start+16]
+                            # Pack LSB first: weight[0] in bits [1:0], weight[15] in bits [31:30]
+                            packed = 0
+                            for t in range(16):
+                                packed |= (chunk[t] << (t * 2))
+                            packed_weights[row, word_idx] = packed
+
+                    QuantID = 128  # Unique ID for BNRV (0x80)
+
+                    # Write BNRV layer header (uint32_t arrays)
+                    f.write(f'// Layer: {layer}\n')
+                    f.write(f'// QuantType: {quantization_type} (16 trits per 32-bit word, BNRV format)\n')
+                    f.write(f'#define {layer}_active\n')
+                    f.write(f'#define {layer}_bitperweight {QuantID}\n')
+                    f.write(f'#define {layer}_incoming_weights {n_inputs}\n')
+                    f.write(f'#define {layer}_outgoing_weights {outgoing_weights}\n')
+
+                    f.write(f'const uint32_t {layer}_weights[] = {{')
+                    for i, data in enumerate(packed_weights.flatten()):
+                        if i % 8 == 0:
+                            f.write('\n\t')
+                        f.write(f'0x{data:08x},')
+                    f.write('\n};\n\n')
+
+                    print(f'Layer: {layer} BNRV: {n_inputs} inputs (padded), {outgoing_weights} outputs, {packed_weights.size} uint32 words')
                     continue  # Skip standard 32-bit packing
                 else:
                     print(f'Skipping layer {layer} with quantization type {quantization_type} and {bpw} bits per weight. Quantization type not supported.')

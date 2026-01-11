@@ -5,7 +5,7 @@ model: 'CNNMNIST' # 'FCMNIST' or 'CNNMNST' This is the class name of the model a
 dataset: 'MNIST' # 'MNIST', or EMNIST splits: EMNIST_BALANCED, EMNIST_BYCLASS, EMNIST_BYMERGE, EMNIST_LETTERS, EMNIST_DIGITS, EMNIST_MNIST
   
 # Quantization settings
-QuantType: '4bitsym' # 'Ternary', 'Binary', 'BinaryBalanced', '2bitsym', '4bit', '4bitsym', '8bit', 'None", 'FP130', 'NF4'
+QuantType: 'BNRV' # 'Ternary', 'BNRV', 'Binary', 'BinaryBalanced', '2bitsym', '4bit', '4bitsym', '8bit', 'None", 'FP130', 'NF4'
 NormType: 'RMS' # 'RMS', 'Lin', 'BatchNorm'
 WScale: 'PerTensor' # 'PerTensor', 'PerOutput'
 
@@ -43,10 +43,10 @@ prune_groupstoprune: 32   # number of groups to prune
 prune_totalgroups: 96     # total number of groups. e.g. if there are 384 channels and 96 groups, then each group has 4 channels
 
 # Model parameters
-cnn_width: 64       # Width of CNN layers (CNNMNIST only)
+cnn_width: 80       # Width of CNN layers (CNNMNIST only)
 network_width1: 96
 network_width2: 64
 network_width3: 0
 
 # name
-runtag: "octav" # runtag is prefix for runname
+runtag: "BNRV" # runtag is prefix for runname

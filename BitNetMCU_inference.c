@@ -134,6 +134,26 @@ void processfclayer( int8_t *activations,  const uint32_t *weights, int32_t bits
                     weightChunk &= 0xFFFF;  // Clear upper bits for next iteration
                 }
             }
+        } else if (bits_per_weight == 128) {  // BNRV: 16 trits packed in 32 bits (2-bit encoding)
+            // Encoding: 00=0, 01=+1, 11=-1 (compatible with BNRV extension)
+            const uint32_t *weightidx32 = (const uint32_t *)weights;
+            weightidx32 += i * (n_input / 16);  // Jump to current output's weights
+
+            for (uint32_t k = 0; k < n_input; k += 16) {
+                uint32_t weightChunk = *weightidx32++;
+
+                for (uint32_t j = 0; j < 16; j++) {
+                    uint32_t w = weightChunk & 0x3;  // Extract 2 bits
+                    if (w == 0x1) {        // 01 = +1
+                        sum += *activations_idx;
+                    } else if (w == 0x3) { // 11 = -1
+                        sum -= *activations_idx;
+                    }
+                    // 00 = 0, skip addition
+                    activations_idx++;
+                    weightChunk >>= 2;  // Shift to next 2-bit weight
+                }
+            }
         // Multiplier-less inference for CH32V003
 // #if defined(__riscv) && !defined(__riscv_mul)
 #if defined(CH32V003) 
